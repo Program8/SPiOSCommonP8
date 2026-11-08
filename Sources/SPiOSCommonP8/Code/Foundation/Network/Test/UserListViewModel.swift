@@ -5,12 +5,13 @@ class UserListViewModel: ObservableObject,FWLoggerDelegate {
     @Published var users: [User] = []
     @Published var alertMessage: String?
     @Published var isShowingAlert = false
-    let networkService = FWNetworkService(provider: URLSessionNetworkProvider())
+    
     func fetchUsers() {
         Global.logThreadType(tag: tag)
-        let service=networkService
+        
         Task {
-            let result = await service.requestWithQuery(
+            let networkService = FWNetworkService(provider: URLSessionNetworkProvider())
+            let result = await networkService.requestWithQuery(
                 method: .get,
                 url: "https://jsonplaceholder.typicode.com/users",
                 responseType: [User].self

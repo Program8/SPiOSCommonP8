@@ -20,20 +20,24 @@ public class FWLogger:@unchecked Sendable{
     private init() {}
     
     // MARK: - Logging Methods
+    public func `default`(tag: String, message: String){
+        log(level: .default, tag: tag, message: "▫️ \(message)")
+    }
+    
     public func info(tag: String, message: String){
-        log(level: .info, tag: tag, message: message)
+        log(level: .info, tag: tag, message: "💡 \(message)")
     }
     
     public func error(tag: String, message: String) {
-        log(level: .error, tag: tag, message: message)
+        log(level: .error, tag: tag, message: "❌ \(message)")
     }
     
     public func debug(tag: String, message: String) {
-        log(level: .debug, tag: tag, message: message)
+        log(level: .debug, tag: tag, message: "🪲 \(message)")
     }
     
     public func fault(tag: String, message: String) {
-        log(level: .fault, tag: tag, message: message)
+        log(level: .fault, tag: tag, message: "⚠️ \(message)")
     }
     
     // MARK: - Internal Helper

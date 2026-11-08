@@ -11,7 +11,7 @@ public final class FWThreadManager:Sendable{
     public static let shared=FWThreadManager()
     public let lockQueue=DispatchQueue(label: "FWThreadManager.lockQueue")
     private let serialQueue = DispatchQueue(label: "FWThreadManager.queue.serial")
-
+    private let concurrentQueue = DispatchQueue(label: "FWThreadManager.queue.concurrent",attributes: .concurrent)
     public func executeSequentially(_ task: @Sendable @escaping () -> Void) {
         serialQueue.async {
             task()

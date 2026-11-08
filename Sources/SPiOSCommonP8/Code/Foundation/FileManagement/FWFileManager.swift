@@ -112,7 +112,7 @@ public final class FWFileManager:Sendable,FWLoggerDelegate{
                 data = image.jpegData(compressionQuality: compressionQuality)
             } else {
                 let msg = "\(Msg.unsupportedExt) '\(fileExtension)'."
-                self.mLog(msg: msg)
+                await self.mLogDefault(msg: msg)
                 return .failure(.imageEncodingFailed(msg))
             }
             guard let data else {
@@ -136,10 +136,10 @@ public final class FWFileManager:Sendable,FWLoggerDelegate{
             let fileURL = dirURL.appendingPathComponent(finalName)
             do {
                 try data.write(to: fileURL, options: .atomic)
-                self.mLog(msg: "\(Msg.savedImageOk) \(finalName)")
+                await self.mLogDefault(msg: "\(Msg.savedImageOk) \(finalName)")
                 return .success(fileURL)
             } catch {
-                self.mLog(msg: "\(Msg.savedImageFail) \(error.localizedDescription)")
+                await self.mLogDefault(msg: "\(Msg.savedImageFail) \(error.localizedDescription)")
                 return .failure(.writeFailed(error.localizedDescription))
             }
         }.value
@@ -196,7 +196,7 @@ public final class FWFileManager:Sendable,FWLoggerDelegate{
             let ext = fileExtension.lowercased()
             guard ext == "png" || ext == "jpg" || ext == "jpeg" else {
                 let msg = "\(Msg.unsupportedExt) '\(fileExtension)'."
-                self.mLog(msg: msg)
+                await self.mLogDefault(msg: msg)
                 return .failure(.imageEncodingFailed(msg))
             }
             var dirURL = FileManager.default.urls(for: directory, in: .userDomainMask)[0]
@@ -206,16 +206,16 @@ public final class FWFileManager:Sendable,FWLoggerDelegate{
             let fileURL = dirURL.appendingPathComponent(name + "." + ext)
             guard FileManager.default.fileExists(atPath: fileURL.path) else {
                 let msg = "\(Msg.fileMissing): \(fileURL.path)"
-                self.mLog(msg: msg)
+                await self.mLogDefault(msg: msg)
                 return .failure(.writeFailed(msg))
             }
             guard let data = try? Data(contentsOf: fileURL),
                   let image = UIImage(data: data) else {
                 let msg = "\(Msg.loadImageFailed): \(fileURL.path)"
-                self.mLog(msg: msg)
+                await self.mLogDefault(msg: msg)
                 return .failure(.writeFailed(msg))
             }
-            self.mLog(msg: "\(Msg.fetchedImageOk): \(name).\(fileExtension)")
+            self.mLogDefault(msg: "\(Msg.fetchedImageOk): \(name).\(fileExtension)")
             return .success(image)
         }.value
     }
@@ -245,7 +245,7 @@ public final class FWFileManager:Sendable,FWLoggerDelegate{
         var isDir: ObjCBool = false
         guard fm.fileExists(atPath: targetURL.path, isDirectory: &isDir), isDir.boolValue else {
             // Folder does not exist or is not a directory → log and return true
-            mLog(msg: "\(Msg.dirNotDirectory): \(targetURL.path)")
+            await mLogDefault(msg: "\(Msg.dirNotDirectory): \(targetURL.path)")
             return true
         }
 
@@ -254,10 +254,10 @@ public final class FWFileManager:Sendable,FWLoggerDelegate{
                                                       includingPropertiesForKeys: nil,
                                                       options: [.skipsHiddenFiles])
             let isEmpty = contents.isEmpty
-            mLog(msg: "Directory check at \(targetURL.path) → \(isEmpty ? "Empty" : "Not Empty")")
+            await mLogDefault(msg: "Directory check at \(targetURL.path) → \(isEmpty ? "Empty" : "Not Empty")")
             return isEmpty
         } catch {
-            mLog(msg: "\(Msg.readDirFailed): \(error.localizedDescription)")
+            await mLogDefault(msg: "\(Msg.readDirFailed): \(error.localizedDescription)")
             return true
         }
     }
@@ -278,10 +278,10 @@ public final class FWFileManager:Sendable,FWLoggerDelegate{
                 let contents = try fm.contentsOfDirectory(at: targetURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
                 let fileCount = contents.count
                 try fm.removeItem(at: targetURL)
-                self.mLog(msg: "Deleted directory: \(targetURL.path) with \(fileCount) files")
+                await self.mLogDefault(msg: "Deleted directory: \(targetURL.path) with \(fileCount) files")
                 return .success(fileCount)
             } catch {
-                self.mLog(msg: "Failed to delete directory: \(error.localizedDescription)")
+                await self.mLogDefault(msg: "Failed to delete directory: \(error.localizedDescription)")
                 return .failure(.writeFailed("Failed to delete directory: \(error.localizedDescription)"))
             }
         }.value
