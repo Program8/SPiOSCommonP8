@@ -20,23 +20,13 @@ public class FWCDManager: FWLoggerDelegate {
     private init() {}
     
     /// Loads a standard persistent container using a model file name.
-    public func loadContainer(coreDataModelFileName: String, completion: @escaping CompletionHandler) {
-        // Explicitly load the model from Bundle.main (the iOS App target)
-        if let modelURL = Bundle.main.url(forResource: coreDataModelFileName, withExtension: "momd"),
-           let managedObjectModel = NSManagedObjectModel(contentsOf: modelURL) {
-            container = NSPersistentContainer(name: coreDataModelFileName, managedObjectModel: managedObjectModel)
-            mLogInfo(msg: "Successfully loaded Core Data model '\(coreDataModelFileName)' from Bundle.main.")
-        } else {
-//             Fallback default initializer
-            container = NSPersistentContainer(name: coreDataModelFileName)
-            mLogDebug(msg: "Model '\(coreDataModelFileName)' not found in Bundle.main. Falling back to default NSPersistentContainer initializer.")
-        }
-        
+    public func setupCoreDataStack(coreDataModelFileName: String, completion: @escaping CompletionHandler) {
+        container = NSPersistentContainer(name: coreDataModelFileName)
         loadPersistentStores(completion: completion)
     }
     
     /// Loads a persistent container configured via a container builder.
-    public func loadContainer(builder: NSPersistentContainerBuilder, completion: @escaping CompletionHandler) {
+    public func setupCoreDataStack(builder: NSPersistentContainerBuilder, completion: @escaping CompletionHandler) {
         container = builder.build()
         loadPersistentStores(completion: completion)
     }
