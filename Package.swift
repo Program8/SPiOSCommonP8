@@ -14,6 +14,9 @@ let package = Package(
             name: "SPiOSCommonP8",
             targets: ["SPiOSCommonP8"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", from: "0.65.1")
+    ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
