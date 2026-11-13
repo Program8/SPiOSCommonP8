@@ -12,7 +12,7 @@ public class FWCDManager: FWLoggerDelegate {
     @MainActor
     public static let shared = FWCDManager()
     
-    private(set) var container: NSPersistentContainer!
+     var container: NSPersistentContainer!
     
     /// Typealias for the Core Data container loading completion handler
     public typealias CompletionHandler = (Error?) -> Void
