@@ -8,11 +8,8 @@
 import Foundation
 import CoreData
 
-extension FWCDManager {
-    public enum ContextType{
-        case viewContext,backgroundContext
-        
-    }
+public extension FWCDManager {
+    
     public func context(for type: ContextType) -> NSManagedObjectContext {
         switch type {
         case .viewContext:
@@ -21,8 +18,8 @@ extension FWCDManager {
             return container.newBackgroundContext()
         }
     }
-    public func fetch<T: NSManagedObject>(for request: NSFetchRequest<T>, in type: ContextType) throws -> [T] {
-        return try context(for: type).fetch(request)
+    public func fetch<T: NSManagedObject>(for request: NSFetchRequest<T>, context: NSManagedObjectContext) throws -> [T] {
+        return try context.fetch(request)
     }
     public func save(context:NSManagedObjectContext)throws{
         if context.hasChanges {

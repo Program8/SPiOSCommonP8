@@ -6,7 +6,9 @@
 //
 
 import CoreData
-
+public enum ContextType{
+    case viewContext,backgroundContext
+}
 public class FWCDManager: FWLoggerDelegate {
     
     @MainActor
