@@ -6,10 +6,9 @@
 //
 
 extension FWCDManager{
-    public class Test{
-    public func demo(){
-            
+    public class Demo{
+        public func demo(){
+            PredicateDemo().demo()
         }
-    
     }
 }
