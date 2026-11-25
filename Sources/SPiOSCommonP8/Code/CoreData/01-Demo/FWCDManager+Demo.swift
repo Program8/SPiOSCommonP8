@@ -8,7 +8,8 @@
 extension FWCDManager{
     public class Demo{
         public func demo(){
-            PredicateDemo().demo()
+//            PredicateDemo().demo()
+            NSSortDescriptorDemo().demo()
         }
     }
 }
