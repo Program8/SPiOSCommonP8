@@ -40,8 +40,7 @@ class NSSortDescriptorDemo{
     func sortNames() {
         let nsArray = arrayRowData as NSArray
         // 1. Default sort descriptor: ascending = true, no custom selector.
-        // For strings, default comparison is case-sensitive and diacritic-sensitive.
-        // Uppercase comes before lowercase.
+        // For strings, default comparison is case-sensitive and diacritic-sensitive.Uppercase comes before lowercase.
         let sort1 = NSSortDescriptor(key: keyFirstName, ascending: true)
         let sortedDefault = (nsArray.sortedArray(using: [sort1]) as? [[String: Any]]) ?? []
         print("Default sort:", sortedDefault.compactMap { $0[keyFirstName] as? String })
