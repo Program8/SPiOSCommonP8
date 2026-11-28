@@ -4,186 +4,152 @@
 //
 //  Created by Vijay Sachan on 21/11/26.
 //
+
 import CoreData
-import Foundation
-
-public enum FWStringMatchOptions {
-    case exact
-    case caseInsensitive
-    case diacriticInsensitive
-    case caseAndDiacriticInsensitive
-
-    public var modifierSuffix: String {
-        switch self {
-        case .exact:
-            return ""
-        case .caseInsensitive:
-            return "[c]"
-        case .diacriticInsensitive:
-            return "[d]"
-        case .caseAndDiacriticInsensitive:
-            return "[cd]"
-        }
-    }
-}
 
 /// A predicate builder designed to support three predicate-building approaches:
 /// 1. **Format strings** (`NSPredicate(format:_:)` with `%K` and `%@`) — implemented first.
-/// 2. **Direct programmatic construction** (`NSExpression` and `NSComparisonPredicate`) — planned next.
+/// 2. **Direct programmatic construction** (`NSExpression` and `NSComparisonPredicate`) — active below.
 /// 3. **Predicate templates** (`$VARIABLE` expressions resolved via `withSubstitutionVariables(_:)`) — planned third.
 ///
-/// Designed for use across in-memory evaluation (`evaluate(with:)`) and Core Data fetches while keeping
-/// string modifiers (`[c]`, `[d]`, `[cd]`), wildcard escaping, and store compatibility consistent.
-public final class FWPredicateBuilder {
-    private var subpredicates: [NSPredicate] = []
+/// - Parameter Root: The Core Data entity class (`NSManagedObject` subclass) that
+///   owns the attributes referenced in each predicate clause. Constraining `Root`
+///   to `NSManagedObject` ensures the generated `NSPredicate` targets a Core Data
+///   managed object model/fetch request rather than an arbitrary non-Core Data
+///   Swift struct or plain class, and aligns with KVC / `#keyPath` attribute lookups.
+public final class FWPredicateBuilder<Root: NSManagedObject> {
+
+    /// Shorthand alias for `NSComparisonPredicate`.
+    public typealias CP = NSComparisonPredicate
+
+    // Constraining `Root: NSManagedObject` scopes this builder to Core Data entities,
+    // which support KVC/SQLite `NSPredicate` evaluation and `#keyPath(Entity.property)`
+    // references—unlike pure Swift value types or non-`NSManagedObject` classes.
+    private var currentPredicate: NSPredicate?
+    private var pendingJoin: NSCompoundPredicate.LogicalType?
 
     public init() {}
 
-    // MARK: - Wildcard & Escaping Helpers
-
-    /// Escapes `\`, `*`, and `?` so user input is treated literally inside `LIKE` patterns.
-    public static func escapeLikePattern(_ input: String) -> String {
-        return input
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "*", with: "\\*")
-            .replacingOccurrences(of: "?", with: "\\?")
-    }
-
-    // MARK: - Format-String Builders
-
+    /// Clears any accumulated predicates and pending logical operators so the
+    /// builder instance can be reused for a new query.
     @discardableResult
-    public func equalTo(
-        key: String,
-        value: CVarArg,
-        options: FWStringMatchOptions = .exact
-    ) -> Self {
-        let format = "%K ==\(options.modifierSuffix) %@"
-        subpredicates.append(NSPredicate(format: format, key, value))
+    public func reset() -> Self {
+        currentPredicate = nil
+        pendingJoin = nil
         return self
     }
 
+    /// Appends a comparison predicate clause using an Objective-C key path string
+    /// such as `#keyPath(CDUser.age)` to avoid hardcoded attribute strings.
+    ///
+    /// - Parameters:
+    ///   - not: When `true`, wraps this clause in `NSCompoundPredicate(type: .not, ...)`.
+    ///     Defaults to `false`.
+    ///   - keyPath: Attribute key path (e.g., `#keyPath(User.age)`).
+    ///   - operator: Comparison operator to apply.
+    ///   - value: Constant right-hand value to compare against.
+    ///   - options: Comparison options such as `.caseInsensitive`. Defaults to `[]`.
+    ///   - modifier: Comparison modifier such as `.direct` or `.any`. Defaults to `.direct`.
+    /// - Returns: `self` for fluent method chaining.
     @discardableResult
-    public func notEqualTo(
-        key: String,
-        value: CVarArg,
-        options: FWStringMatchOptions = .exact
-    ) -> Self {
-        let format = "%K !=\(options.modifierSuffix) %@"
-        subpredicates.append(NSPredicate(format: format, key, value))
-        return self
-    }
+    public func q(
+        not: Bool = false,
+        _ keyPath: String,
+        _ operator: CP.Operator,
+        _ value: Any?,
+        options: CP.Options = [],
+        modifier: CP.Modifier = .direct
+    ) throws -> Self {
+        let left = NSExpression(forKeyPath: keyPath)
+        let right = NSExpression(forConstantValue: value)
 
-    @discardableResult
-    public func beginsWith(
-        key: String,
-        searchText: String,
-        options: FWStringMatchOptions = .caseAndDiacriticInsensitive,
-        ignoreEmptyQuery: Bool = true
-    ) -> Self {
-        if ignoreEmptyQuery && searchText.isEmpty {
-            return self
+        var nextPredicate: NSPredicate = CP(
+            leftExpression: left,
+            rightExpression: right,
+            modifier: modifier,
+            type: `operator`,
+            options: options
+        )
+
+        // Wrap only this comparison clause in NOT when requested. (NSCompoundPredicate.LogicalType)
+        if not {
+            nextPredicate = NSCompoundPredicate(type: .not, subpredicates: [nextPredicate])
         }
-        let format = "%K BEGINSWITH\(options.modifierSuffix) %@"
-        subpredicates.append(NSPredicate(format: format, key, searchText))
-        return self
-    }
 
-    @discardableResult
-    public func endsWith(
-        key: String,
-        searchText: String,
-        options: FWStringMatchOptions = .caseAndDiacriticInsensitive,
-        ignoreEmptyQuery: Bool = true
-    ) -> Self {
-        if ignoreEmptyQuery && searchText.isEmpty {
-            return self
+        if let existing = currentPredicate {
+            guard let joinType = pendingJoin else {
+                throw Error.missingPredicate(
+                    message: "Cannot append a predicate clause without calling 'and()' or 'or()' after the previous clause."
+                )
+            }
+            currentPredicate = NSCompoundPredicate(
+                type: joinType,
+                subpredicates: [existing, nextPredicate]
+            )
+            pendingJoin = nil
+        } else {
+            currentPredicate = nextPredicate
         }
-        let format = "%K ENDSWITH\(options.modifierSuffix) %@"
-        subpredicates.append(NSPredicate(format: format, key, searchText))
+
         return self
     }
 
+    /// Joins the existing predicate with the next clause using logical `AND`.
     @discardableResult
-    public func contains(
-        key: String,
-        searchText: String,
-        options: FWStringMatchOptions = .caseAndDiacriticInsensitive,
-        ignoreEmptyQuery: Bool = true
-    ) -> Self {
-        if ignoreEmptyQuery && searchText.isEmpty {
-            return self
+    public func and() throws -> Self {
+        guard currentPredicate != nil else {
+            throw Error.missingPredicate(message: "Cannot apply 'and()' before adding a predicate")
         }
-        let format = "%K CONTAINS\(options.modifierSuffix) %@"
-        subpredicates.append(NSPredicate(format: format, key, searchText))
+        pendingJoin = .and
         return self
     }
 
-    /// Passes a pre-built `LIKE` pattern (e.g., `"Jo*"`, `"*oh*"`, `"J?hn"`) directly.
+    /// Joins the existing predicate with the next clause using logical `OR`.
     @discardableResult
-    public func like(
-        key: String,
-        pattern: String,
-        options: FWStringMatchOptions = .caseAndDiacriticInsensitive
-    ) -> Self {
-        let format = "%K LIKE\(options.modifierSuffix) %@"
-        subpredicates.append(NSPredicate(format: format, key, pattern))
-        return self
-    }
-
-    /// Escapes literal `\`, `*`, and `?` in `searchText` before wrapping with `*` wildcards.
-    @discardableResult
-    public func likeLiteralContains(
-        key: String,
-        searchText: String,
-        options: FWStringMatchOptions = .caseAndDiacriticInsensitive,
-        ignoreEmptyQuery: Bool = true
-    ) -> Self {
-        if ignoreEmptyQuery && searchText.isEmpty {
-            return self
+    public func or() throws -> Self {
+        guard currentPredicate != nil else {
+            throw Error.missingPredicate(message: "Cannot apply 'or()' before adding a predicate")
         }
-        let escaped = Self.escapeLikePattern(searchText)
-        return like(key: key, pattern: "*\(escaped)*", options: options)
-    }
-
-    @discardableResult
-    public func greaterThan(key: String, value: CVarArg) -> Self {
-        subpredicates.append(NSPredicate(format: "%K > %@", key, value))
+        pendingJoin = .or
         return self
     }
 
-    @discardableResult
-    public func lessThan(key: String, value: CVarArg) -> Self {
-        subpredicates.append(NSPredicate(format: "%K < %@", key, value))
-        return self
+    /// Finalizes and returns the composed `NSPredicate`, or `nil` if no clauses were added.
+    public func build() -> NSPredicate? {
+        currentPredicate
+    }
+}
+
+//══════════════════════════════════════
+// MARK: - Ext - Error
+//══════════════════════════════════════
+
+public extension FWPredicateBuilder {
+    enum Error: Swift.Error {
+        case missingPredicate(message: String)
+    }
+}
+
+func test() {
+    class User: NSManagedObject {
+        @NSManaged var name: String
+        @NSManaged var age: Int
+        @NSManaged var isStudent: Bool
     }
 
-    @discardableResult
-    public func between(key: String, lower: CVarArg, upper: CVarArg) -> Self {
-        subpredicates.append(NSPredicate(format: "%K BETWEEN %@", key, [lower, upper]))
-        return self
-    }
+    let builder = FWPredicateBuilder<User>()
 
-    @discardableResult
-    public func `in`(key: String, values: [CVarArg]) -> Self {
-        subpredicates.append(NSPredicate(format: "%K IN %@", key, values))
-        return self
-    }
+    // Single NOT clause
+    _ = try? builder
+        .reset()
+        .q(not: true, #keyPath(User.isStudent), .equalTo, true)
+        .build()
 
-    @discardableResult
-    public func addFormat(_ format: String, _ args: CVarArg...) -> Self {
-        subpredicates.append(NSPredicate(format: format, argumentArray: args))
-        return self
-    }
-
-    // MARK: - Compound Output
-
-    public func buildAnd() -> NSPredicate {
-        guard !subpredicates.isEmpty else { return NSPredicate(value: true) }
-        return NSCompoundPredicate(andPredicateWithSubpredicates: subpredicates)
-    }
-
-    public func buildOr() -> NSPredicate {
-        guard !subpredicates.isEmpty else { return NSPredicate(value: false) }
-        return NSCompoundPredicate(orPredicateWithSubpredicates: subpredicates)
-    }
+    // Combined with AND
+    _ = try? builder
+        .reset()
+        .q(#keyPath(User.age), .greaterThanOrEqualTo, 18)
+        .and()
+        .q(not: true, #keyPath(User.isStudent), .equalTo, true)
+        .build()
 }
