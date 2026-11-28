@@ -7,6 +7,14 @@
 
 import CoreData
 
+public protocol EntityKey {
+    var keyPath: String { get }
+}
+
+public protocol EntityKeysProvider {
+    associatedtype Key: RawRepresentable & EntityKey where Key.RawValue == String
+}
+
 /// A predicate builder designed to support three predicate-building approaches:
 /// 1. **Format strings** (`NSPredicate(format:_:)` with `%K` and `%@`) — implemented first.
 /// 2. **Direct programmatic construction** (`NSExpression` and `NSComparisonPredicate`) — active below.
@@ -121,7 +129,7 @@ public final class FWPredicateBuilder<Root: NSManagedObject> {
 }
 
 //══════════════════════════════════════
-// MARK: - Ext - Error
+// MARK: - Ext 1 - Error
 //══════════════════════════════════════
 
 public extension FWPredicateBuilder {
@@ -130,26 +138,71 @@ public extension FWPredicateBuilder {
     }
 }
 
-func test() {
-    class User: NSManagedObject {
-        @NSManaged var name: String
-        @NSManaged var age: Int
-        @NSManaged var isStudent: Bool
+//══════════════════════════════════════
+// MARK: - Ext 2 - EntityKeysProvider
+//══════════════════════════════════════
+
+public extension FWPredicateBuilder where Root: EntityKeysProvider {
+    @discardableResult
+    func q(
+        not: Bool = false,
+        _ key: Root.Key,
+        _ operator: CP.Operator,
+        _ value: Any?,
+        options: CP.Options = [],
+        modifier: CP.Modifier = .direct
+    ) throws -> Self {
+        try q(
+            not: not,
+            key.keyPath,
+            `operator`,
+            value,
+            options: options,
+            modifier: modifier
+        )
     }
+}
 
-    let builder = FWPredicateBuilder<User>()
+//══════════════════════════════════════
+// MARK: - Ext 3 - Demo
+//══════════════════════════════════════
 
-    // Single NOT clause
-    _ = try? builder
-        .reset()
-        .q(not: true, #keyPath(User.isStudent), .equalTo, true)
-        .build()
+private final class DemoUser: NSManagedObject, EntityKeysProvider {
+    @NSManaged var name: String
+    @NSManaged var age: Int
+    @NSManaged var isStudent: Bool
 
-    // Combined with AND
-    _ = try? builder
-        .reset()
-        .q(#keyPath(User.age), .greaterThanOrEqualTo, 18)
-        .and()
-        .q(not: true, #keyPath(User.isStudent), .equalTo, true)
-        .build()
+    enum Key: String, CaseIterable, EntityKey {
+        case name
+        case age
+        case isStudent
+
+        var keyPath: String {
+            switch self {
+            case .name: return #keyPath(DemoUser.name)
+            case .age: return #keyPath(DemoUser.age)
+            case .isStudent: return #keyPath(DemoUser.isStudent)
+            }
+        }
+    }
+}
+
+extension FWPredicateBuilder: Demoable {
+    public func demo() {
+        let builder = FWPredicateBuilder<DemoUser>()
+
+        // Single NOT clause
+        _ = try? builder
+            .reset()
+            .q(not: true, .isStudent, .equalTo, true)
+            .build()
+
+        // Combined with AND
+        _ = try? builder
+            .reset()
+            .q(.age, .greaterThanOrEqualTo, 18)
+            .and()
+            .q(not: true, .isStudent, .equalTo, true)
+            .build()
+    }
 }
